@@ -400,7 +400,20 @@ func _spawn_trap(cell: Vector2i, kind: String) -> void:
 	root.set_meta("kind", kind)
 	root.set_meta("armed", true)
 	root.set_meta("heat_source", kind in ["screen", "spiral", "goon", "goddess"])
+
+	# ~28% chance this trap hides a key
+	var hides_key := false
+	if kind in ["spiral", "goon", "goddess", "fracture"] and randf() < 0.28:
+		hides_key = true
+	root.set_meta("hides_key", hides_key)
+
+	# Media path (leave empty for now, or put a real path later)
+	var media_path := ""
+	# Example later: media_path = "res://media/trap_01.png"
+	root.set_meta("media_path", media_path)
+
 	root.body_entered.connect(_on_trap.bind(root))
+
 	var col := CollisionShape3D.new()
 	var sh := BoxShape3D.new()
 	sh.size = Vector3(cell_size * 0.62, 2.2, cell_size * 0.62)
@@ -426,56 +439,19 @@ func _spawn_trap(cell: Vector2i, kind: String) -> void:
 		var qm := QuadMesh.new()
 		qm.size = Vector2(2.52, 1.46)
 		panel.mesh = qm
-		panel.position = wall_off + inward + Vector3(0, 0.25, 0)
+		panel.position = wall_off + inward * 0.28 + Vector3(0, 0.25, 0)
 		panel.rotation_degrees = Vector3(0, yaw, 0)
-		panel.material_override = screen_mat_a if kind != "goon" else screen_mat_b
+
+		if kind in ["screen", "spiral", "goon", "goddess"]:
+			panel.material_override = screen_mat_a if randf() < 0.5 else screen_mat_b
+		else:
+			var pmat := StandardMaterial3D.new()
+			pmat.albedo_color = Color(0.08, 0.02, 0.12)
+			pmat.emission_enabled = true
+			pmat.emission = Color(0.6, 0.1, 0.5)
+			pmat.emission_energy_multiplier = 1.8
+			panel.material_override = pmat
 		root.add_child(panel)
-
-		var hit := StaticBody3D.new()
-		hit.collision_layer = 4
-		hit.collision_mask = 0
-		hit.set_meta("heat_source", true)
-		hit.set_meta("kind", kind)
-		var hit_col := CollisionShape3D.new()
-		var hit_sh := BoxShape3D.new()
-		hit_sh.size = Vector3(2.6, 1.5, 0.2)
-		hit_col.shape = hit_sh
-		hit.add_child(hit_col)
-		panel.add_child(hit)
-
-		var glow := OmniLight3D.new()
-		glow.light_color = Color(0.75, 0.18, 0.8) if kind != "screen" else Color(0.55, 0.22, 0.9)
-		glow.light_energy = 2.6
-		glow.omni_range = 6.0
-		glow.position = panel.position
-		glow.shadow_enabled = false
-		root.add_child(glow)
-
-	if kind == "floor":
-		var q := MeshInstance3D.new()
-		var qm := QuadMesh.new()
-		qm.size = Vector2(2.4, 2.4)
-		q.mesh = qm
-		q.rotation_degrees = Vector3(-90, 0, 0)
-		q.position = Vector3(0, -0.97, 0)
-		q.material_override = screen_mat_b
-		root.add_child(q)
-
-	if kind == "goddess":
-		var fig := MeshInstance3D.new()
-		var cap := CapsuleMesh.new()
-		cap.radius = 0.22
-		cap.height = 1.55
-		fig.mesh = cap
-		var fmat := StandardMaterial3D.new()
-		fmat.albedo_color = Color(0.7, 0.35, 0.4, 0.35)
-		fmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		fmat.emission_enabled = true
-		fmat.emission = Color(0.8, 0.2, 0.55)
-		fmat.emission_energy_multiplier = 1.4
-		fig.material_override = fmat
-		fig.position = Vector3(0.7, 0.1, 0.4)
-		root.add_child(fig)
 
 	add_child(root)
 
@@ -485,13 +461,12 @@ func _on_trap(body: Node, root: Area3D) -> void:
 		return
 	if not root.get_meta("armed", true):
 		return
-	if GameState.overlay_locked or GameState.run_over:
-		return
+
+	# Make it one-shot so it doesn't retrigger immediately
 	root.set_meta("armed", false)
-	var kind := String(root.get_meta("kind"))
-	get_tree().call_group("game_root", "trigger_trap", kind)
-	var t := get_tree().create_timer(16.0)
-	t.timeout.connect(func() -> void:
-		if is_instance_valid(root):
-			root.set_meta("armed", true)
-	)
+
+	var kind: String = String(root.get_meta("kind", "spiral"))
+	var hides_key: bool = bool(root.get_meta("hides_key", false))
+	var media_path: String = String(root.get_meta("media_path", ""))
+
+	get_tree().call_group("game_root", "trigger_trap", kind, hides_key, media_path)

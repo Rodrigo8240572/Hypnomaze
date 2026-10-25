@@ -27,6 +27,13 @@ func _ready() -> void:
 	spiral = CanvasLayer.new()
 	spiral.set_script(load("res://scripts/spiral_overlay.gd"))
 	add_child(spiral)
+
+	# Optional: listen when a trap finishes
+	if shatter.has_signal("finished"):
+		shatter.finished.connect(_on_trap_finished)
+	if spiral.has_signal("finished"):
+		spiral.finished.connect(_on_trap_finished)
+
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	GameState.say("You wake in the wing. Three keys. Do not stare.")
 	if GameState.joi_mode:
@@ -125,8 +132,6 @@ func _process(delta: float) -> void:
 		GameState.say(GameState.random_intercom())
 	if GameState.joi_mode:
 		GameState.add_fixation(0.28 * delta)
-	if GameState.looking_at_feed:
-		pass
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -145,20 +150,29 @@ func set_paused(v: bool) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if v else Input.MOUSE_MODE_CAPTURED
 
 
-func trigger_trap(kind: String) -> void:
+# ===== UPDATED FUNCTION =====
+func trigger_trap(kind: String, give_key: bool = false, media_path: String = "") -> void:
 	if GameState.overlay_locked or GameState.run_over:
 		return
+
 	match kind:
 		"fracture", "floor", "word":
-			shatter.begin(kind)
+			if shatter.has_method("begin"):
+				shatter.begin(kind, give_key)
 		"spiral", "goon", "goddess":
-			spiral.begin(kind)
+			if spiral.has_method("begin"):
+				spiral.begin(kind, give_key, media_path)
 		"screen":
 			GameState.say("The glass wants your eyes. Keep walking.")
 			GameState.add_fixation(7.0)
 		_:
 			GameState.say(GameState.random_joi())
 			GameState.add_fixation(6.0)
+
+
+func _on_trap_finished(success: bool) -> void:
+	if player and player.has_method("set_locked"):
+		player.set_locked(false)
 
 
 func on_exit_reached() -> void:
